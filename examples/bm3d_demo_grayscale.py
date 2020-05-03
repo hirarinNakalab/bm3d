@@ -17,7 +17,6 @@ from bm3d import bm3d, BM3DProfile
 from experiment_funcs import get_experiment_noise, get_psnr, get_cropped_psnr
 
 
-# noise_var = 0.02  # Noise variance
 smoothing_factor = 2.5e-3  # Smoothing factor
 seed = 0  # seed for pseudorandom noise realization
 sr = 22050
@@ -30,26 +29,15 @@ profile = BM3DProfile()
 
 
 def power_to_db(power_sp):
-    power_max = np.max(power_sp)
-    # db = librosa.power_to_db(power_sp, ref=np.max)
     db = 10 * np.log10(power_sp)
     db = np.clip(db, -80.0, None)
     db_abs_max = np.max(np.abs(db))
     db /= db_abs_max
-
-    # db_min = np.min(db)
-    # db -= db_min
-    # db_max = np.max(db)
-    # db /= db_max
-    return db, power_max, db_abs_max
+    return db, db_abs_max
 
 def fix_denoised_db(db_denoised, db_abs_max):
-    # denoised_min = np.min(db_denoised)
-    # db_denoised -= denoised_min
     db_denoised = np.clip(db_denoised, a_min=-1.0, a_max=1.0)
     db_denoised *= db_abs_max
-    # db_denoised *= db_max
-    # db_denoised += db_min
     return db_denoised
 
 def plot_db(db, db_denoised, fn):
@@ -93,9 +81,8 @@ def calc_mse(power_sp, power_sp_est, fn):
 def save_to_zip():
     shutil.make_archive('submit-data', 'zip', '../submit')
 
-def save_files(db, db_est, fn, power_max, power_sp, save_audio=False, plot=False):
+def save_files(db, db_est, fn, power_sp, save_audio=False, plot=False):
     plot_db(db, db_est, fn)
-    # power_sp_est = librosa.db_to_power(db_est, ref=power_max)
     power_sp_est = np.power(10.0, 0.1 * db_est)
     calc_mse(power_sp, power_sp_est, fn)
     if save_audio:
@@ -106,12 +93,12 @@ def save_files(db, db_est, fn, power_max, power_sp, save_audio=False, plot=False
 
 def bm3d_denoise(fn):
     power_sp = np.load(fn)
-    db, power_max, db_abs_max = power_to_db(power_sp)
+    db, db_abs_max = power_to_db(power_sp)
 
     z = np.atleast_3d(db)
     db_est = bm3d(z, np.sqrt(smoothing_factor), profile=profile)
     db_est = fix_denoised_db(db_denoised=db_est, db_abs_max=db_abs_max)
-    save_files(db, db_est, fn, power_max, power_sp, save_audio=True)
+    save_files(db, db_est, fn, power_sp, save_audio=True)
 
 def main():
     for dir in "../audio ../submit ../fig".split():
@@ -120,6 +107,7 @@ def main():
     root_dir = "../dist-data/noised_tgt"
     for file in glob.glob(f"{root_dir}/*.npy"):
         bm3d_denoise(file)
+
     save_to_zip()
 
 def non_local_means(fn):
@@ -142,8 +130,7 @@ def sample():
 
     # Load noise-free image
     y = np.array(Image.open(imagename)) / 255
-    # Possible noise types to be generated 'gw', 'g1', 'g2', 'g3', 'g4', 'g1w',
-    # 'g2w', 'g3w', 'g4w'.
+    # Possible noise types to be generated 'gw', 'g1', 'g2', 'g3', 'g4', 'g1w', 'g2w', 'g3w', 'g4w'.
     noise_type = 'g3'
     noise_var = 0.02  # Noise variance
     seed = 0  # seed for pseudorandom noise realization
@@ -155,15 +142,15 @@ def sample():
     # Call BM3D With the default settings.
     y_est = bm3d(z, psd)
     # To include refiltering:
-    # y_est = bm3d(z, psd, 'refilter')
+    y_est = bm3d(z, psd, 'refilter')
 
     # For other settings, use BM3DProfile.
-    # profile = BM3DProfile(); # equivalent to profile = BM3DProfile('np');
-    # profile.gamma = 6;  # redefine value of gamma parameter
-    # y_est = bm3d(z, psd, profile);
+    profile = BM3DProfile(); # equivalent to profile = BM3DProfile('np');
+    profile.gamma = 6;  # redefine value of gamma parameter
+    y_est = bm3d(z, psd, profile);
 
     # Note: For white noise, you may instead of the PSD also pass a standard deviation
-    # y_est = bm3d(z, sqrt(noise_var));
+    y_est = bm3d(z, np.sqrt(noise_var));
 
     psnr = get_psnr(y, y_est)
     print("PSNR:", psnr)
