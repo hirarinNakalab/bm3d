@@ -11,13 +11,13 @@ import librosa
 import matplotlib.pyplot as plt
 
 from PIL import Image
-from skimage.restoration import denoise_nl_means, estimate_sigma
 from sklearn.metrics import mean_squared_error
 from bm3d import bm3d, BM3DProfile
 from experiment_funcs import get_experiment_noise, get_psnr, get_cropped_psnr
 
 
-smoothing_factor = 2.5e-3  # Smoothing factor
+# bm3d parameters
+smoothing_factor = 3.e-3  # Smoothing factor
 seed = 0  # seed for pseudorandom noise realization
 sr = 22050
 
@@ -27,10 +27,13 @@ profile.denoise_residual = True
 # profile.search_window_ht = 101
 # profile.search_window_wiener = 101
 
+parameters = f"noise_variance:{smoothing_factor}\n"
+for key, value in profile.__dict__.items():
+    parameters += f"{key}:{value}\n"
 
-def power_to_db(power_sp, clip_low=-80.0):
+
+def power_to_db(power_sp):
     db = 10 * np.log10(power_sp)
-    db = np.clip(db, clip_low, None)
     db_abs_max = np.max(np.abs(db))
     db /= db_abs_max
     return db, db_abs_max
@@ -63,6 +66,12 @@ def plot_3d(spectrogram):
     ax.plot_surface(xx, yy, spectrogram, cmap='viridis')
     plt.show()
 
+def histogram(signal):
+    plt.hist(signal)
+    plt.show()
+    plt.close()
+    plt.clf()
+
 def write_wav(audio, fn):
     new_fn = os.path.basename(fn).replace("noised_", "").replace(".npy", ".wav")
     output_fn = f"../audio/{new_fn}"
@@ -80,9 +89,11 @@ def calc_mse(power_sp, power_sp_est, fn):
 def save_to_zip():
     shutil.make_archive('submit-data', 'zip', '../submit')
 
-def save_files(db, db_est, fn, power_sp, save_audio=False, plot=False):
+def save_files(db, db_est, fn, power_sp, power_max, save_audio=False, plot=False):
     plot_db(db, db_est, fn)
     power_sp_est = np.power(10.0, 0.1 * db_est)
+    power_sp_est_max = np.max(power_sp_est)
+    power_sp_est *= (power_max / power_sp_est_max)
     calc_mse(power_sp, power_sp_est, fn)
     if save_audio:
         audio = librosa.feature.inverse.mel_to_audio(power_sp_est, sr=sr)
@@ -90,14 +101,15 @@ def save_files(db, db_est, fn, power_sp, save_audio=False, plot=False):
     if plot:
         plot_3d(power_sp_est)
 
-def bm3d_denoise(fn):
+def bm3d_denoise(fn, save_audio):
     power_sp = np.load(fn)
+    power_max = np.max(power_sp)
     db, db_abs_max = power_to_db(power_sp)
     z = np.atleast_3d(db)
 
     db_est = bm3d(z, np.sqrt(smoothing_factor), profile=profile)
     db_est = fix_denoised_db(db_denoised=db_est, db_abs_max=db_abs_max)
-    save_files(db, db_est, fn, power_sp, save_audio=False)
+    save_files(db, db_est, fn, power_sp, power_max, save_audio=save_audio)
 
 def main():
     for dir in "../audio ../submit ../fig".split():
@@ -105,24 +117,19 @@ def main():
 
     root_dir = "../dist-data/noised_tgt"
     for file in glob.glob(f"{root_dir}/*.npy"):
-        bm3d_denoise(file)
+        bm3d_denoise(file, save_audio=False)
+
+    with open("../submit/readme.txt", "w") as f:
+        explanation = f"""
+        1. Scaling mel-spectrogram using log function (10*np.log10(power_sp))
+        2. Smooth log mel-spectrogram with Block mathing 3D
+        3. Rescaling log mel-spectrogram (np.power(10.0, 0.1 * db_est))
+        [bm3d parameters]
+        {parameters}
+        """
+        f.write(explanation)
 
     save_to_zip()
-
-def non_local_means(fn):
-    patch_kw = dict(patch_size=8,  # 5x5 patches
-                    patch_distance=20,  # 13x13 search area
-                    multichannel=False)
-
-    power_sp = np.load(fn)
-    db, power_max, db_abs_max = power_to_db(power_sp)
-
-    sigma_est = estimate_sigma(db, multichannel=False)
-    denoised_db = denoise_nl_means(db, h=0.6 * sigma_est, sigma=sigma_est,
-                               fast_mode=True, **patch_kw)
-    db_est = fix_denoised_db(db_denoised=denoised_db, db_abs_max=db_abs_max)
-
-    save_files(db, denoised_db, fn, power_max, power_sp)
 
 def sample():
     imagename = 'cameraman256.png'
