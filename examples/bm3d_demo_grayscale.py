@@ -22,21 +22,20 @@ seed = 0  # seed for pseudorandom noise realization
 sr = 22050
 
 profile = BM3DProfile()
+profile.denoise_residual = True
 # profile.gamma = 8.0
 # profile.search_window_ht = 101
 # profile.search_window_wiener = 101
-# profile.denoise_residual = True
 
 
-def power_to_db(power_sp):
+def power_to_db(power_sp, clip_low=-80.0):
     db = 10 * np.log10(power_sp)
-    db = np.clip(db, -80.0, None)
+    db = np.clip(db, clip_low, None)
     db_abs_max = np.max(np.abs(db))
     db /= db_abs_max
     return db, db_abs_max
 
 def fix_denoised_db(db_denoised, db_abs_max):
-    db_denoised = np.clip(db_denoised, a_min=-1.0, a_max=1.0)
     db_denoised *= db_abs_max
     return db_denoised
 
@@ -94,11 +93,11 @@ def save_files(db, db_est, fn, power_sp, save_audio=False, plot=False):
 def bm3d_denoise(fn):
     power_sp = np.load(fn)
     db, db_abs_max = power_to_db(power_sp)
-
     z = np.atleast_3d(db)
+
     db_est = bm3d(z, np.sqrt(smoothing_factor), profile=profile)
     db_est = fix_denoised_db(db_denoised=db_est, db_abs_max=db_abs_max)
-    save_files(db, db_est, fn, power_sp, save_audio=True)
+    save_files(db, db_est, fn, power_sp, save_audio=False)
 
 def main():
     for dir in "../audio ../submit ../fig".split():
