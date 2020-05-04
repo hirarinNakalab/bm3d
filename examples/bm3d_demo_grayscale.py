@@ -17,7 +17,7 @@ from experiment_funcs import get_experiment_noise, get_psnr, get_cropped_psnr
 
 
 # bm3d parameters
-smoothing_factor = 3.e-3  # Smoothing factor
+smoothing_factor = 1.5e-3  # Smoothing factor
 seed = 0  # seed for pseudorandom noise realization
 sr = 22050
 
@@ -30,6 +30,14 @@ profile.denoise_residual = True
 parameters = f"noise_variance:{smoothing_factor}\n"
 for key, value in profile.__dict__.items():
     parameters += f"{key}:{value}\n"
+
+explanation = f"""
+1. Scaling mel-spectrogram using log function (10*np.log10(power_sp))
+2. Smooth log mel-spectrogram with Block mathing 3D
+3. Rescaling log mel-spectrogram (np.power(10.0, 0.1 * db_est))
+[bm3d parameters]
+{parameters}
+"""
 
 
 def power_to_db(power_sp):
@@ -92,8 +100,6 @@ def save_to_zip():
 def save_files(db, db_est, fn, power_sp, power_max, save_audio=False, plot=False):
     plot_db(db, db_est, fn)
     power_sp_est = np.power(10.0, 0.1 * db_est)
-    power_sp_est_max = np.max(power_sp_est)
-    power_sp_est *= (power_max / power_sp_est_max)
     calc_mse(power_sp, power_sp_est, fn)
     if save_audio:
         audio = librosa.feature.inverse.mel_to_audio(power_sp_est, sr=sr)
@@ -117,16 +123,9 @@ def main():
 
     root_dir = "../dist-data/noised_tgt"
     for file in glob.glob(f"{root_dir}/*.npy"):
-        bm3d_denoise(file, save_audio=False)
+        bm3d_denoise(file, save_audio=True)
 
     with open("../submit/readme.txt", "w") as f:
-        explanation = f"""
-        1. Scaling mel-spectrogram using log function (10*np.log10(power_sp))
-        2. Smooth log mel-spectrogram with Block mathing 3D
-        3. Rescaling log mel-spectrogram (np.power(10.0, 0.1 * db_est))
-        [bm3d parameters]
-        {parameters}
-        """
         f.write(explanation)
 
     save_to_zip()
