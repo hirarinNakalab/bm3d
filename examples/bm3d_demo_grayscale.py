@@ -78,7 +78,11 @@ def histogram(signal):
     plt.hist(signal)
     plt.show()
     plt.close()
-    plt.clf()
+
+def imshow(signal):
+    plt.imshow(signal)
+    plt.show()
+    plt.close()
 
 def write_wav(audio, fn):
     new_fn = os.path.basename(fn).replace("noised_", "").replace(".npy", ".wav")
@@ -123,7 +127,7 @@ def main():
 
     root_dir = "../dist-data/noised_tgt"
     for file in glob.glob(f"{root_dir}/*.npy"):
-        bm3d_denoise(file, save_audio=True)
+        bm3d_denoise(file, save_audio=False)
 
     with open("../submit/readme.txt", "w") as f:
         f.write(explanation)
@@ -136,7 +140,8 @@ def sample():
     # Load noise-free image
     y = np.array(Image.open(imagename)) / 255
     # Possible noise types to be generated 'gw', 'g1', 'g2', 'g3', 'g4', 'g1w', 'g2w', 'g3w', 'g4w'.
-    noise_type = 'g3'
+    noise_patterns = ['gw', 'g1', 'g2', 'g3', 'g4', 'g1w', 'g2w', 'g3w', 'g4w']
+    noise_type = noise_patterns[8] #'g3'
     noise_var = 0.02  # Noise variance
     seed = 0  # seed for pseudorandom noise realization
 
@@ -147,15 +152,15 @@ def sample():
     # Call BM3D With the default settings.
     y_est = bm3d(z, psd)
     # To include refiltering:
-    y_est = bm3d(z, psd, 'refilter')
+    # y_est = bm3d(z, psd, 'refilter')
 
     # For other settings, use BM3DProfile.
-    profile = BM3DProfile(); # equivalent to profile = BM3DProfile('np');
-    profile.gamma = 6;  # redefine value of gamma parameter
-    y_est = bm3d(z, psd, profile);
+    # profile = BM3DProfile(); # equivalent to profile = BM3DProfile('np');
+    # profile.gamma = 6;  # redefine value of gamma parameter
+    # y_est = bm3d(z, psd, profile);
 
     # Note: For white noise, you may instead of the PSD also pass a standard deviation
-    y_est = bm3d(z, np.sqrt(noise_var));
+    # y_est = bm3d(z, np.sqrt(noise_var));
 
     psnr = get_psnr(y, y_est)
     print("PSNR:", psnr)
