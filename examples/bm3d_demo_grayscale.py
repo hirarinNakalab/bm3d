@@ -139,7 +139,7 @@ def main():
 
     root_dir = "../dist-data/noised_tgt"
     for file in glob.glob(f"{root_dir}/*.npy"):
-        bm3d_denoise(file, save_audio=False)
+        bm3d_denoise(file, save_audio=True)
 
     with open("../submit/readme.txt", "w") as f:
         f.write(explanation)
