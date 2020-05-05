@@ -17,7 +17,7 @@ from experiment_funcs import get_experiment_noise, get_psnr, get_cropped_psnr
 
 
 # bm3d parameters
-smoothing_factor = 1.5e-3  # Smoothing factor
+smoothing_factor = 2e-3  # Smoothing factor
 seed = 0  # seed for pseudorandom noise realization
 sr = 22050
 
@@ -42,13 +42,19 @@ explanation = f"""
 
 def power_to_db(power_sp):
     db = 10 * np.log10(power_sp)
-    db_abs_max = np.max(np.abs(db))
-    db /= db_abs_max
-    return db, db_abs_max
+    db = np.where(db < -105.0, -105.0, db)
+    db_max = np.max(np.abs(db))
+    db /= db_max
+    return db, db_max
 
-def fix_denoised_db(db_denoised, db_abs_max):
-    db_denoised *= db_abs_max
-    return db_denoised
+def fix_db_est(db, db_est, db_max):
+    rescale = min(
+        (np.max(db)/np.max(db_est)),
+        (np.min(db)/np.min(db_est)),
+    )
+    db_est *= rescale
+    db_est *= db_max
+    return db_est
 
 def plot_db(db, db_denoised, fn):
     fig, axes = plt.subplots(2, 1)
@@ -84,6 +90,13 @@ def imshow(signal):
     plt.show()
     plt.close()
 
+def plot_qualtile(signal):
+    fig, axes = plt.subplots(1, 2)
+    axes[0].boxplot(signal.flatten())
+    axes[1].violinplot(signal.flatten())
+    plt.show()
+    plt.close()
+
 def write_wav(audio, fn):
     new_fn = os.path.basename(fn).replace("noised_", "").replace(".npy", ".wav")
     output_fn = f"../audio/{new_fn}"
@@ -101,7 +114,7 @@ def calc_mse(power_sp, power_sp_est, fn):
 def save_to_zip():
     shutil.make_archive('submit-data', 'zip', '../submit')
 
-def save_files(db, db_est, fn, power_sp, power_max, save_audio=False, plot=False):
+def save_files(db, db_est, fn, power_sp, save_audio=False, plot=False):
     plot_db(db, db_est, fn)
     power_sp_est = np.power(10.0, 0.1 * db_est)
     calc_mse(power_sp, power_sp_est, fn)
@@ -113,13 +126,12 @@ def save_files(db, db_est, fn, power_sp, power_max, save_audio=False, plot=False
 
 def bm3d_denoise(fn, save_audio):
     power_sp = np.load(fn)
-    power_max = np.max(power_sp)
-    db, db_abs_max = power_to_db(power_sp)
+    db, db_max = power_to_db(power_sp)
     z = np.atleast_3d(db)
 
     db_est = bm3d(z, np.sqrt(smoothing_factor), profile=profile)
-    db_est = fix_denoised_db(db_denoised=db_est, db_abs_max=db_abs_max)
-    save_files(db, db_est, fn, power_sp, power_max, save_audio=save_audio)
+    db_est = fix_db_est(db, db_est, db_max=db_max)
+    save_files(db, db_est, fn, power_sp, save_audio=save_audio)
 
 def main():
     for dir in "../audio ../submit ../fig".split():
